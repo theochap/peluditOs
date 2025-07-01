@@ -1,13 +1,15 @@
-[package]
+[workspace]
 name = "peluditOS"
 version = "0.1.0"
 edition = "2024"
 
-[build-dependencies]
-cc = "1.2.27"
+# Define workspace members
+members = [
+    "crates/boot",
+    "crates/graphics"
+]
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
+[workspace.dependencies]
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+spin = { version = "0.10.0" }
+pelu_graphics = { path = "crates/graphics" }
