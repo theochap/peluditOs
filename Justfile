@@ -8,7 +8,7 @@ default:
 
 [working-directory("iso")]
 rebuild-iso:
-    cp {{WORKSPACE}}/target/protected_mode/release/peluditOS iso
+    cp {{WORKSPACE}}/target/protected_mode/release/peluditOS {{WORKSPACE}}/iso/boot
     -(rm image.iso)
     xorriso -as mkisofs -R -r -J -b limine/limine-bios-cd.bin \
         -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \

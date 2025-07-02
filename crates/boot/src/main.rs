@@ -34,9 +34,16 @@ pub static MULTIBOOT2_HEADER: Multiboot2Header = Multiboot2Header {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() {
-    write!(
+    writeln!(
         VGA_STATE.lock(),
-        "Hello, world! Pelu is booting... She is complicated sometimes"
+        "Hello, world! Pelu is booting... She is complicated sometimes. New line is working."
+    )
+    .unwrap();
+
+    writeln!(
+        VGA_STATE.lock(),
+        "Writing to a new line. Non ascii characters are replaced by a white box. {}",
+        '\x12'
     )
     .unwrap();
 
