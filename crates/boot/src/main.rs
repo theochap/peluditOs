@@ -1,9 +1,9 @@
 #![no_std]
 #![no_main]
 
-use core::fmt::Write;
+use core::{arch::asm, fmt::Write};
 
-use pelu_graphics::VGA_STATE;
+use pelu_graphics::kprintln;
 
 use crate::boot::{
     MB2_ARCH_I386, MB2_END_TAG_FLAGS, MB2_END_TAG_SIZE, MB2_END_TAG_TYPE, MB2_HEADER_LEN,
@@ -32,25 +32,40 @@ pub static MULTIBOOT2_HEADER: Multiboot2Header = Multiboot2Header {
     end_tag_size: MB2_END_TAG_SIZE,
 };
 
+const MULTIBOOT2_MAGIC_EAX: u32 = 0x36d76289;
+
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() {
-    writeln!(
-        VGA_STATE.lock(),
-        "Hello, world! Pelu is booting... She is complicated sometimes. New line is working."
-    )
-    .unwrap();
+    // We need to ensure that the EAX register contains the multiboot2 magic number.
+    // Get the value that was in EAX when we were called
+    let mut eax_value: u32;
 
-    writeln!(
-        VGA_STATE.lock(),
-        "Writing to a new line. Non ascii characters are replaced by a white box. {}",
+    unsafe {
+        asm!("mov {0:e}, eax", out(reg) eax_value);
+    }
+
+    kprintln!("EAX value: {eax_value:X}");
+
+    if eax_value != MULTIBOOT2_MAGIC_EAX {
+        panic!("EAX value is not the multiboot2 magic number! Impossible to boot...");
+    }
+
+    kprintln!(
+        "Hello, world! Pelu is booting... She is complicated sometimes. New line is working. \n"
+    );
+
+    kprintln!(
+        "Writing to a new line. Non ascii characters are replaced by a white box. {} \n",
         '\x12'
-    )
-    .unwrap();
+    );
+
+    kprintln!("\t Tab is working.");
 
     loop {}
 }
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
+    kprintln!("Panic: {_info}");
     loop {}
 }

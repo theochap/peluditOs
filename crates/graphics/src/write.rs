@@ -74,3 +74,17 @@ impl Write for VgaState {
         Ok(())
     }
 }
+
+#[macro_export]
+macro_rules! kprint {
+    ($($arg:tt)*) => {
+        write!($crate::vga::VGA_STATE.lock(), $($arg)*).unwrap();
+    };
+}
+
+#[macro_export]
+macro_rules! kprintln {
+    ($($arg:tt)*) => {
+        writeln!($crate::VGA_STATE.lock(), $($arg)*).unwrap();
+    };
+}
