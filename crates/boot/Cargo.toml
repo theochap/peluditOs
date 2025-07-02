@@ -1,13 +1,11 @@
 [package]
-name = "peluditOS"
+name = "pelu-boot"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pelu_graphics.workspace = true
+pelu-graphics.workspace = true
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
+[[bin]]
+name = "peluditOS"
+path = "src/main.rs"

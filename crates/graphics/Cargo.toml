@@ -1,13 +1,7 @@
 [package]
-name = "pelu_graphics"
+name = "pelu-graphics"
 version = "0.1.0"
 edition = "2024"
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
 
 [dependencies]
 lazy_static.workspace = true

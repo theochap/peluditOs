@@ -28,7 +28,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "pelu_graphics"
+name = "pelu-boot"
+version = "0.1.0"
+dependencies = [
+ "pelu-graphics",
+]
+
+[[package]]
+name = "pelu-graphics"
 version = "0.1.0"
 dependencies = [
  "lazy_static",
@@ -36,10 +43,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "peluditOS"
+name = "pelu-long"
 version = "0.1.0"
 dependencies = [
- "pelu_graphics",
+ "pelu-graphics",
 ]
 
 [[package]]

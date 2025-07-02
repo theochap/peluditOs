@@ -1,0 +1,3 @@
+
+build-long:
+    cargo build --bin peluditOS_x86_64 --target x86_64-unknown-none --release

@@ -1,0 +1,11 @@
+[package]
+name = "pelu-long"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pelu-graphics.workspace = true
+
+[[bin]]
+name = "peluditOS_x86_64"
+path = "./src/main.rs"
