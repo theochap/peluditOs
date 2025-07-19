@@ -37,6 +37,7 @@ impl PageTable {
     /// We don't need to set more than 32 bits for the physical address + flags because we're still in 32-bits compatibility mode and
     /// we're only mapping the first 1GiB of physical memory. This method will panic if the physical address + flags
     /// is greater than 32 bits.
+    #[inline(always)]
     pub fn map_page(&mut self, entry: usize, phys_addr: u64, flags: u64) {
         let index = self.entries.index_mut(entry) as *mut u64;
         let full_value = phys_addr | flags;
@@ -46,6 +47,7 @@ impl PageTable {
 
         unsafe {
             asm!("
+            // Since we're inlining the function, we need to save the eax register.
             push eax
             mov eax, {0:e}
             mov [eax], {1:e}    
@@ -57,6 +59,7 @@ impl PageTable {
     }
 
     /// Maps all entries in the page table to the physical address and flags provided by the map function.
+    #[inline(always)]
     pub fn map_entries(&mut self, map_fn: impl Fn(usize) -> (u64, u64)) {
         for entry in 0..PAGE_TABLE_SIZE {
             let (phys_addr, flags) = map_fn(entry);
@@ -81,6 +84,38 @@ impl IdentityPaging {
             level_2: PageTable::new(),
         }
     }
+
+    pub fn setup(&mut self) {
+        kprintln!("=== Identity Paging Setup ===");
+        // SAFETY: We are not mutating the static variable IDENT_PAGING from multiple threads (because the kernel is single-threaded at boot time).
+        let level_3_addr = &raw const self.level_3 as u64;
+        let level_2_addr = &raw const self.level_2 as u64;
+
+        // Map the level 4 page table to the physical address of the level 3 page table. Set the present and writable flags.
+        self.level_4.map_page(
+            0,
+            level_3_addr,
+            Flags::Present as u64 | Flags::Writable as u64,
+        );
+
+        // Map the level 3 page table to the physical address of the level 2 page table. Set the present and writable flags.
+        self.level_3.map_page(
+            0,
+            level_2_addr,
+            Flags::Present as u64 | Flags::Writable as u64,
+        );
+
+        // Map the level 2 page tables to the first 1GiB of physical memory. Set the present and writable flags.
+        self.level_2.map_entries(|entry| {
+            let phys_addr = entry as u64 * LARGE_PAGE_SIZE;
+            (
+                phys_addr,
+                Flags::Present as u64 | Flags::Writable as u64 | Flags::LargePage as u64,
+            )
+        });
+        kprintln!("Identity paging setup successful!");
+        kprintln!();
+    }
 }
 
 #[repr(u64)]
@@ -98,39 +133,4 @@ pub enum Flags {
 }
 
 #[unsafe(link_section = ".bss")]
-pub static mut IDENT_PAGING: IdentityPaging = IdentityPaging::new();
-
-pub fn setup_identity_paging() {
-    kprintln!("=== Identity Paging Setup ===");
-    // SAFETY: We are not mutating the static variable IDENT_PAGING from multiple threads (because the kernel is single-threaded at boot time).
-    unsafe {
-        let level_3_addr = &raw const IDENT_PAGING.level_3 as u64;
-        let level_2_addr = &raw const IDENT_PAGING.level_2 as u64;
-        let pages = &raw mut IDENT_PAGING;
-
-        // Map the level 4 page table to the physical address of the level 3 page table. Set the present and writable flags.
-        (*pages).level_4.map_page(
-            0,
-            level_3_addr,
-            Flags::Present as u64 | Flags::Writable as u64,
-        );
-
-        // Map the level 3 page table to the physical address of the level 2 page table. Set the present and writable flags.
-        (*pages).level_3.map_page(
-            0,
-            level_2_addr,
-            Flags::Present as u64 | Flags::Writable as u64,
-        );
-
-        // Map the level 2 page tables to the first 1GiB of physical memory. Set the present and writable flags.
-        (*pages).level_2.map_entries(|entry| {
-            let phys_addr = entry as u64 * LARGE_PAGE_SIZE;
-            (
-                phys_addr,
-                Flags::Present as u64 | Flags::Writable as u64 | Flags::LargePage as u64,
-            )
-        });
-    }
-    kprintln!("Identity paging setup successful!");
-    kprintln!();
-}
+pub static IDENT_PAGING: spin::Mutex<IdentityPaging> = spin::Mutex::new(IdentityPaging::new());

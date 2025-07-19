@@ -32,6 +32,7 @@ name = "pelu-boot"
 version = "0.1.0"
 dependencies = [
  "pelu-graphics",
+ "spin 0.10.0",
 ]
 
 [[package]]

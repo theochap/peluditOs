@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 pelu-graphics.workspace = true
+spin.workspace = true
 
 [[bin]]
 name = "peluditOS"
