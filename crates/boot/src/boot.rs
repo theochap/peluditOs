@@ -18,7 +18,6 @@ pub(crate) const MB2_END_TAG_SIZE: u32 = 8;
 /// bytes of the file.  All modern linkers put `.multiboot2_header` very
 /// early, but you can enforce its address with a linker script if needed.
 #[repr(C, align(8))]
-#[derive(Debug, Copy, Clone)]
 pub struct Multiboot2Header {
     /* fixed part */
     pub(crate) magic: u32,
