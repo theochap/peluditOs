@@ -6,6 +6,9 @@ edition = "2024"
 [dependencies]
 pelu-graphics.workspace = true
 
+[build-dependencies]
+cc.workspace = true
+
 [[bin]]
 name = "peluditOS_x86_64"
 path = "./src/main.rs"

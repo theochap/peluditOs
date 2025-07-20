@@ -3,11 +3,11 @@
 
 use core::fmt::Write;
 
-use pelu_graphics::VGA_STATE;
+use pelu_graphics::kprintln;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn _start() {
-    write!(VGA_STATE.lock(), "Booted in long mode!").unwrap();
+pub extern "C" fn kmain() {
+    kprintln!("Booted in long mode!");
 
     loop {}
 }
