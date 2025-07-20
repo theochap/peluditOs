@@ -3,7 +3,7 @@ use std::{env, path::PathBuf};
 use cc::Build;
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/boot/asm/*");
+    println!("cargo:rerun-if-changed=src/boot/*");
     println!("cargo:rerun-if-changed=link.ld");
 
     // Get the current directory
@@ -24,15 +24,15 @@ fn main() {
     println!("cargo:rustc-link-arg=-nostdlib");
 
     Build::new()
-        .include("src/boot/asm")
+        .include("src/boot")
         .files(vec![
-            "src/boot/asm/main.s",
-            "src/boot/asm/multiboot.s",
-            "src/boot/asm/print.s",
-            "src/boot/asm/long-mode.s",
-            "src/boot/asm/paging.s",
-            "src/boot/asm/cpuid.s",
-            "src/boot/asm/gdt.s",
+            "src/boot/main.s",
+            "src/boot/multiboot.s",
+            "src/boot/print.s",
+            "src/boot/long-mode.s",
+            "src/boot/paging.s",
+            "src/boot/cpuid.s",
+            "src/boot/gdt.s",
         ])
         .flag("-x")
         .flag("assembler")
