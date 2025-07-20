@@ -6,6 +6,7 @@
 .include "cpuid.s"
 .include "paging.s"
 .include "long-mode.s"
+.include "gdt.s"
 
 .section .text
 .global _start
@@ -22,6 +23,8 @@ _start:
     call setup_identity_paging
 
     call enable_long_mode
+
+    call setup_gdt
 
     hlt
 

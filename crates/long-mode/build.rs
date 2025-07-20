@@ -32,6 +32,7 @@ fn main() {
             "src/boot/asm/long-mode.s",
             "src/boot/asm/paging.s",
             "src/boot/asm/cpuid.s",
+            "src/boot/asm/gdt.s",
         ])
         .flag("-x")
         .flag("assembler")

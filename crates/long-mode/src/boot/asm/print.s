@@ -20,7 +20,7 @@ print_char:
 
     .update_cursor:
         movl vga_x, %ecx
-        // if vga x is less than 80, increment it, otherwise reset it to 0 to fit the window
+        // if vga x is less than 80 (vga width), increment it, otherwise reset it to 0 to fit the window
         cmp $80, %ecx
         jge .update_cursor_y
         addl $1, vga_x
@@ -28,7 +28,7 @@ print_char:
     .update_cursor_y:
         movl $0, vga_x 
         movl vga_y, %ecx
-        // if vga y is less than 25, increment it, otherwise reset it to 0 to fit the window
+        // if vga y is less than 25 (vga height), increment it, otherwise reset it to 0 to fit the window
         cmp $25, %ecx
         jge .reset_window
         addl $1, vga_y

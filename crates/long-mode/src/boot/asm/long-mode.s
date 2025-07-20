@@ -29,7 +29,5 @@ enable_long_mode:
     ret
 
 .section .rodata
-enabling_long_mode_string:
-    .asciz "Enabling long mode..."
 long_mode_ok_string:
     .asciz "Entered compatibility mode!"
