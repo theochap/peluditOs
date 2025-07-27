@@ -1,8 +1,8 @@
 .code32
 
 .section .text
-.global enable_long_mode
-enable_long_mode:
+.global enable_compatibility_mode
+enable_compatibility_mode:
     // load P4 to cr3 register (cpu uses this to access the P4 table)
     leal p4_table, %eax
     movl %eax, %cr3
@@ -27,6 +27,7 @@ enable_long_mode:
     call ok
 
     ret
+
 
 .section .rodata
 long_mode_ok_string:

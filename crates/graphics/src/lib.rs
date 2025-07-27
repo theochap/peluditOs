@@ -6,3 +6,4 @@ mod vga;
 mod write;
 
 pub use vga::VGA_STATE;
+pub use write::clear_screen;

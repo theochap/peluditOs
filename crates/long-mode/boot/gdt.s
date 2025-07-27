@@ -6,8 +6,7 @@
 .section .text
 .global setup_gdt
 setup_gdt:
-    lea gdt_ptr, %eax
-    lgdt (%eax)
+    lgdt gdt_ptr
 
     leal gdt_loaded_string, %eax
     call ok
@@ -18,6 +17,7 @@ setup_gdt:
 .global gdt_begin
 gdt_begin:
     .quad 0
+gdt_code:
     .quad EXECUTABLE | DESCRIPTOR_TABLE | PRESENT | LONG_MODE
 gdt_ptr:
     .word . - gdt_begin - 1

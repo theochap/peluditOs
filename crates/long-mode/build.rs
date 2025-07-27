@@ -23,18 +23,22 @@ fn main() {
     println!("cargo:rustc-link-arg=--gc-sections");
     println!("cargo:rustc-link-arg=-nostdlib");
 
+    let out_dir = env::var("OUT_DIR").unwrap();
+
     Build::new()
-        .include("src/boot")
+        .include("boot")
         .files(vec![
-            "src/boot/main.s",
-            "src/boot/multiboot.s",
-            "src/boot/print.s",
-            "src/boot/long-mode.s",
-            "src/boot/paging.s",
-            "src/boot/cpuid.s",
-            "src/boot/gdt.s",
+            "boot/main.s",
+            "boot/multiboot.s",
+            "boot/print.s",
+            "boot/long-mode-entry.s",
+            "boot/compatibility-mode.s",
+            "boot/paging.s",
+            "boot/cpuid.s",
+            "boot/gdt.s",
         ])
         .flag("-x")
         .flag("assembler")
+        .out_dir(format!("{out_dir}/boot"))
         .compile("boot");
 }

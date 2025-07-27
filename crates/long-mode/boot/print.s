@@ -161,7 +161,7 @@ ok:
 
     ret
 
-.section .bss
+.section .data
 vga_x:
     .long 0
 vga_y:

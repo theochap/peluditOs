@@ -3,10 +3,13 @@
 
 use core::fmt::Write;
 
-use pelu_graphics::kprintln;
+use pelu_graphics::{clear_screen, kprintln};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain() {
+    // Clear the screen...
+    clear_screen();
+
     kprintln!("Booted in long mode!");
 
     loop {}

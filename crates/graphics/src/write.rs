@@ -1,6 +1,9 @@
 use core::fmt::Write;
 
-use crate::vga::{Char, Color, Coord, VGA_HEIGHT, VGA_WIDTH, VgaState};
+use crate::{
+    VGA_STATE,
+    vga::{Char, Color, Coord, VGA_HEIGHT, VGA_WIDTH, VgaState},
+};
 
 impl VgaState {
     fn clear_screen(&mut self) {
@@ -87,4 +90,10 @@ macro_rules! kprintln {
     ($($arg:tt)*) => {
         writeln!($crate::VGA_STATE.lock(), $($arg)*).unwrap();
     };
+}
+
+/// Clear the screen.
+pub fn clear_screen() {
+    let mut vga_state = VGA_STATE.lock();
+    vga_state.clear_screen();
 }
