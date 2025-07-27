@@ -6,7 +6,6 @@ resolver = "3"
 
 # Define workspace members
 members = [
-    "crates/boot",
     "crates/graphics",
     "crates/long-mode"
 ]

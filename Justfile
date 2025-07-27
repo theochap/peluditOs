@@ -1,4 +1,3 @@
-import 'crates/boot/Justfile'
 import 'crates/long-mode/Justfile'
 
 WORKSPACE := source_directory()
