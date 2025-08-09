@@ -1,13 +1,13 @@
 OUTPUT_FORMAT(elf64-x86-64)
 ENTRY(_start)
 
-KERNEL_LMA = 1M;
+KERNEL_LMA = 2M;
 KERNEL_VMA = 0xffffffff80000000;      /* higher‑half base          */
 PAGE_SIZE         = 0x1000;                  /* 4 KiB                     */
 
 SECTIONS
 {
-    /* keep the file above 1 MiB so real-mode BIOS data is untouched */
+    /* keep the file above 2 MiB so real-mode BIOS data is untouched */
     . = KERNEL_LMA;
 
     /* Multiboot header **must** be < 64 KiB from file start */
