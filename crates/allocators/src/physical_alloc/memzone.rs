@@ -1,6 +1,4 @@
-use core::marker::PhantomData;
-
-use crate::physical_alloc::{Boxed, KBox};
+use crate::{kbox::KBox, kmalloc::KMalloc};
 
 const MEM_CELL_SIZE: usize = 1 << 12;
 
@@ -52,12 +50,12 @@ pub trait MemZoneExt: 'static {
 
     fn is_full(&self) -> bool;
 
-    fn split(&mut self) -> Result<(), SplitError>;
+    fn split(&mut self, kbox_maker: &mut KMalloc) -> Result<(), SplitError>;
 
     /// Allocates a chunk of memory from the memzone.
     ///
     /// Returns the offset of the allocated chunk compared to the start of the memzone.
-    fn alloc<T: MemZoneExt>(&mut self) -> Result<usize, AllocError>;
+    fn alloc<T: MemZoneExt>(&mut self, kbox_maker: &mut KMalloc) -> Result<usize, AllocError>;
 
     /// Frees a chunk of memory from the memzone.
     ///
@@ -67,7 +65,11 @@ pub trait MemZoneExt: 'static {
     /// ## Invariant
     /// This chunk of memory should always be full. We should traverse the memory zones down
     /// until we find a fully allocated chunk of memory.
-    fn free<M: MemZoneExt>(&mut self, offset: usize) -> Result<(), FreeError>;
+    fn free<M: MemZoneExt>(
+        &mut self,
+        offset: usize,
+        kbox_maker: &mut KMalloc,
+    ) -> Result<(), FreeError>;
 
     /// Consolidates the memzone.
     ///
@@ -97,11 +99,11 @@ impl MemZoneExt for MemCell {
         matches!(self, Self::Full)
     }
 
-    fn split(&mut self) -> Result<(), SplitError> {
+    fn split(&mut self, _kbox_maker: &mut KMalloc) -> Result<(), SplitError> {
         Err(SplitError::CannotSplit)
     }
 
-    fn alloc<T: MemZoneExt>(&mut self) -> Result<usize, AllocError> {
+    fn alloc<T: MemZoneExt>(&mut self, _kbox_maker: &mut KMalloc) -> Result<usize, AllocError> {
         if self.is_full() {
             return Err(AllocError::MemZoneNotFree);
         }
@@ -121,7 +123,11 @@ impl MemZoneExt for MemCell {
     /// Frees a chunk of memory from the memzone.
     ///
     /// In this case, offset is always 0.
-    fn free<M: MemZoneExt>(&mut self, offset: usize) -> Result<(), FreeError> {
+    fn free<M: MemZoneExt>(
+        &mut self,
+        offset: usize,
+        _kbox_maker: &mut KMalloc,
+    ) -> Result<(), FreeError> {
         if offset != 0 {
             return Err(FreeError::InvalidOffset);
         }
@@ -147,8 +153,8 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
 
     fn new(val: MemCell) -> Self {
         match val {
-            MemCell::Free => MemZone::Free,
-            MemCell::Full => MemZone::Full,
+            MemCell::Free => MemZone::<T>::Free,
+            MemCell::Full => MemZone::<T>::Full,
         }
     }
 
@@ -160,7 +166,7 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
         matches!(self, Self::Full)
     }
 
-    fn split(&mut self) -> Result<(), SplitError> {
+    fn split(&mut self, kbox_maker: &mut KMalloc) -> Result<(), SplitError> {
         // We cannot split a partial memzone.
         let inner = match self {
             Self::Partial { .. } => return Err(SplitError::CannotSplit),
@@ -168,13 +174,17 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
             Self::Full => MemCell::Full,
         };
 
-        let left = KBox::new_bootstrap(T::new(inner)).map_err(|_| SplitError::AllocError)?;
-        let right = KBox::new_bootstrap(T::new(inner)).map_err(|_| SplitError::AllocError)?;
+        let left = kbox_maker
+            .new_box(T::new(inner))
+            .map_err(|_| SplitError::AllocError)?;
+        let right = kbox_maker
+            .new_box(T::new(inner))
+            .map_err(|_| SplitError::AllocError)?;
         *self = Self::Partial { left, right };
         Ok(())
     }
 
-    fn alloc<M: MemZoneExt>(&mut self) -> Result<usize, AllocError> {
+    fn alloc<M: MemZoneExt>(&mut self, kbox_maker: &mut KMalloc) -> Result<usize, AllocError> {
         if M::SIZE > Self::SIZE {
             return Err(AllocError::MemZoneTooSmall {
                 required_size: M::SIZE,
@@ -186,12 +196,12 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
             Self::Full => Err(AllocError::MemZoneNotFree),
 
             Self::Partial { left, right, .. } => {
-                let offset = match left.alloc::<M>() {
+                let offset = match left.alloc::<M>(kbox_maker) {
                     Ok(offset) => offset,
                     Err(_) => {
                         // If the left side failed, we need to allocate on the right side.
                         // We need to add the size of the left side to the offset to get the correct offset on the right side.
-                        T::SIZE + right.alloc::<M>()?
+                        T::SIZE + right.alloc::<M>(kbox_maker)?
                     }
                 };
 
@@ -209,13 +219,17 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
 
             // If the memzone is free, we need to split it and try again.
             Self::Free => {
-                self.split().map_err(AllocError::SplitError)?;
-                self.alloc::<M>()
+                self.split(kbox_maker).map_err(AllocError::SplitError)?;
+                self.alloc::<M>(kbox_maker)
             }
         }
     }
 
-    fn free<M: MemZoneExt>(&mut self, offset: usize) -> Result<(), FreeError> {
+    fn free<M: MemZoneExt>(
+        &mut self,
+        offset: usize,
+        kbox_maker: &mut KMalloc,
+    ) -> Result<(), FreeError> {
         // We need to ensure the offset is valid.
         if offset & Self::SIZE_MASK != 0 {
             // If the offset doesn't fit in the memzone, it's invalid.
@@ -236,9 +250,9 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
 
             Self::Partial { left, right, .. } => {
                 if offset < T::SIZE {
-                    left.free::<M>(offset)?;
+                    left.free::<M>(offset, kbox_maker)?;
                 } else {
-                    right.free::<M>(offset - T::SIZE)?;
+                    right.free::<M>(offset - T::SIZE, kbox_maker)?;
                 }
 
                 self.consolidate().map_err(FreeError::ConsolidateError)?;
@@ -248,8 +262,8 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
 
             // If the offset is lower than the memzone size, we should split the memzone and free the chunk of memory that matches the offset.
             Self::Full => {
-                self.split().map_err(FreeError::SplitError)?;
-                self.free::<M>(offset)
+                self.split(kbox_maker).map_err(FreeError::SplitError)?;
+                self.free::<M>(offset, kbox_maker)
             }
         }
     }
