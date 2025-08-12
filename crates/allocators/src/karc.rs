@@ -42,7 +42,7 @@ impl<T: 'static> Drop for KArc<T> {
     fn drop(&mut self) {
         if self.ref_count.fetch_sub(1, Ordering::SeqCst) == 1 {
             // TODO: free the object inside the memory allocator.
-            drop(self.inner);
+            let _ = self.inner;
         }
     }
 }

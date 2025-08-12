@@ -12,9 +12,7 @@ use crate::utils::NonZero;
 ///
 /// This is a wrapper around a statically allocated value.
 #[derive(Debug)]
-pub struct KBox<T: 'static> {
-    pub(super) inner: &'static mut NonZero<T>,
-}
+pub struct KBox<T: 'static>(pub(super) &'static mut NonZero<T>);
 
 impl<T: 'static> Drop for KBox<T> {
     fn drop(&mut self) {
@@ -24,7 +22,7 @@ impl<T: 'static> Drop for KBox<T> {
 
 impl<T: 'static> KBox<T> {
     pub fn take(self) -> T {
-        let inner = mem::take(self.inner);
+        let inner = mem::take(self.0);
         match inner {
             NonZero::NonZero(inner) => inner,
             NonZero::Zero => unreachable!("KBox is zero"),
@@ -36,7 +34,7 @@ impl<T: 'static> Deref for KBox<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        match &self.inner {
+        match &self.0 {
             NonZero::NonZero(inner) => inner,
             NonZero::Zero => unreachable!("KBox is zero"),
         }
@@ -45,7 +43,7 @@ impl<T: 'static> Deref for KBox<T> {
 
 impl<T: 'static> DerefMut for KBox<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        match self.inner {
+        match self.0 {
             NonZero::NonZero(inner) => inner,
             NonZero::Zero => unreachable!("KBox is zero"),
         }

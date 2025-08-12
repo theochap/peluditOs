@@ -2,6 +2,7 @@ use core::sync::atomic::AtomicUsize;
 
 use crate::{karc::KArc, kbox::KBox, utils::NonZero};
 
+#[derive(Debug)]
 pub struct KMalloc {
     /// The virtual start address of the allocation space.
     start_addr: usize,
@@ -28,7 +29,7 @@ impl KMalloc {
         }
     }
 
-    fn alloc<T: 'static>(&mut self, addr: T) -> Result<&'static mut T, Error> {
+    fn alloc<T: 'static>(&mut self, val: T) -> Result<&'static mut T, Error> {
         // Find the size of the type.
         let size = core::mem::size_of::<T>();
 
@@ -36,7 +37,7 @@ impl KMalloc {
         let align = core::mem::align_of::<T>();
 
         // Get the next available address that is aligned.
-        let next_addr = (self.start_addr + self.offset + align - 1).div_euclid(align);
+        let next_addr = (self.start_addr + self.offset + align - 1).div_euclid(align) * align;
 
         // If the next address is greater than the end of the allocation space, return an error.
         // The allocator should then bump the memory map to make more space.
@@ -46,7 +47,7 @@ impl KMalloc {
 
         // Allocate the memory.
         let ptr = unsafe { &mut *(next_addr as *mut T) };
-        *ptr = addr;
+        *ptr = val;
 
         // Update the current physical address.
         self.offset += size;
@@ -61,7 +62,7 @@ impl KMalloc {
         let ptr: &'static mut NonZero<T> = self.alloc(NonZero::NonZero(addr))?;
 
         // Return the kbox.
-        Ok(KBox { inner: ptr })
+        Ok(KBox(ptr))
     }
 
     pub fn new_arc<T: 'static>(&mut self, addr: T) -> Result<KArc<T>, Error> {
