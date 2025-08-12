@@ -1,0 +1,2 @@
+[linkedProjects]
+paths = ["./Cargo.toml", "./boot/Cargo.toml"]

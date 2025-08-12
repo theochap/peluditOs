@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 spin.workspace = true
+
+[dev-dependencies]
+# Dev dependencies are available in tests and use the host target

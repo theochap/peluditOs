@@ -2,7 +2,7 @@
 //!
 //! Obviously this crate is no-std.
 
-#![no_std]
+#![cfg_attr(any(not(test), target_os = "none"), no_std)]
 
 pub mod karc;
 pub mod kbox;

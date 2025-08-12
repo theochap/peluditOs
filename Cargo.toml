@@ -8,7 +8,10 @@ resolver = "3"
 members = [
     "crates/graphics",
     "crates/allocators",
-    "crates/long-mode"
+]
+
+exclude = [
+    "boot"
 ]
 
 [workspace.dependencies]
@@ -16,10 +19,3 @@ lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 spin = { version = "0.10.0" }
 pelu-graphics = { path = "crates/graphics" }
 pelu-alloc = { path = "crates/allocators" }
-cc = { version = "1.2.30" }
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"

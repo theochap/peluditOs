@@ -1,0 +1,23 @@
+[workspace]
+
+[package]
+name = "pelu-long"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pelu-graphics = { path = "../crates/graphics" }
+
+[build-dependencies]
+cc = { version = "1.2.30" }
+
+[[bin]]
+name = "peluditOS_x86_64"
+path = "./src/main.rs"
+
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

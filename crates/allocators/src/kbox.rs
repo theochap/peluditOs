@@ -11,6 +11,7 @@ use crate::utils::NonZero;
 /// A kernel box.
 ///
 /// This is a wrapper around a statically allocated value.
+#[derive(Debug)]
 pub struct KBox<T: 'static> {
     pub(super) inner: &'static mut NonZero<T>,
 }
