@@ -5,7 +5,7 @@ use crate::{karc::KArc, kbox::KBox, utils::NonZero};
 #[derive(Debug)]
 pub struct KMalloc {
     /// The virtual start address of the allocation space.
-    start_addr: usize,
+    pub(crate) start_addr: usize,
 
     /// The current offset of the allocation space.
     offset: usize,

@@ -5,61 +5,88 @@ use crate::{
 
 struct KStackInner<T: 'static> {
     head: T,
-    tail: Option<KStack<T>>,
+    tail: KStack<T>,
 }
 
-pub struct KStack<T: 'static>(KBox<KStackInner<T>>);
+pub struct KStack<T: 'static>(Option<KBox<KStackInner<T>>>);
 
 impl<T: 'static> KStack<T> {
     pub fn new(kbox_maker: &mut KMalloc, head: T) -> Result<Self, Error> {
-        let list = KMalloc::new_box(kbox_maker, KStackInner { head, tail: None })?;
-        Ok(Self(list))
-    }
-
-    pub fn new_with_tail(kbox_maker: &mut KMalloc, head: T, tail: Self) -> Result<Self, Error> {
         let list = KMalloc::new_box(
             kbox_maker,
             KStackInner {
                 head,
-                tail: Some(tail),
+                tail: Self(None),
             },
         )?;
-        Ok(Self(list))
+        Ok(Self(Some(list)))
     }
 
-    pub fn push(self, kbox_maker: &mut KMalloc, value: T) -> Result<Self, Error> {
-        let new_list = KStack::new_with_tail(kbox_maker, value, self)?;
-        Ok(new_list)
+    pub fn new_with_tail(kbox_maker: &mut KMalloc, head: T, tail: Self) -> Result<Self, Error> {
+        let list = KMalloc::new_box(kbox_maker, KStackInner { head, tail })?;
+        Ok(Self(Some(list)))
     }
 
-    pub fn head(&self) -> &T {
-        &self.0.head
+    pub fn push(&mut self, kbox_maker: &mut KMalloc, value: T) -> Result<(), Error> {
+        match self.0.as_mut() {
+            Some(list) => {
+                list.try_map_inner(|inner| {
+                    let inner = kbox_maker.new_box(inner)?;
+
+                    Ok(KStackInner {
+                        head: value,
+                        tail: Self(Some(inner)),
+                    })
+                })?;
+            }
+            None => {
+                let list = kbox_maker.new_box(KStackInner {
+                    head: value,
+                    tail: Self(None),
+                })?;
+                *self = Self(Some(list));
+            }
+        }
+        Ok(())
     }
 
-    pub fn head_mut(&mut self) -> &mut T {
-        &mut self.0.head
+    pub fn head(&self) -> Option<&T> {
+        self.0.as_ref().map(|inner| &inner.head)
+    }
+
+    pub fn head_mut(&mut self) -> Option<&mut T> {
+        self.0.as_mut().map(|inner| &mut inner.head)
     }
 
     pub fn tail(&self) -> Option<&Self> {
-        self.0.tail.as_ref()
+        self.0.as_ref().map(|inner| &inner.tail)
     }
 
     pub fn tail_mut(&mut self) -> Option<&mut Self> {
-        self.0.tail.as_mut()
+        self.0.as_mut().map(|inner| &mut inner.tail)
     }
 
-    pub fn pop(self) -> (T, Option<Self>) {
-        let inner = self.0.take();
-        let head = inner.head;
-        let tail = inner.tail;
-        (head, tail)
+    pub fn pop(&mut self) -> Option<T> {
+        let inner = self.0.as_mut()?;
+
+        let head = inner
+            .try_map_inner_with_output(|mut inner| {
+                let tail = inner.tail.0.take().ok_or(())?.take();
+
+                Ok::<_, ()>((tail, inner.head))
+            })
+            .ok()?;
+
+        Some(head)
     }
 
     pub fn apply<F: Fn(&mut T)>(&mut self, f: F) {
         let mut next = Some(self);
 
-        while let Some(next_list) = next {
-            f(next_list.head_mut());
+        while let Some(next_list) = next
+            && let Some(head) = next_list.head_mut()
+        {
+            f(head);
             next = next_list.tail_mut();
         }
     }
@@ -70,8 +97,10 @@ impl<T: 'static> KStack<T> {
     ) -> Result<Option<Out>, Err> {
         let mut next = Some(self);
 
-        while let Some(next_list) = next {
-            match f(next_list.head_mut()) {
+        while let Some(next_list) = next
+            && let Some(head) = next_list.head_mut()
+        {
+            match f(head) {
                 Err(err) => return Err(err),
                 Ok(Some(out)) => return Ok(Some(out)),
                 Ok(None) => next = next_list.tail_mut(),
@@ -79,6 +108,10 @@ impl<T: 'static> KStack<T> {
         }
 
         Ok(None)
+    }
+
+    pub fn iter(&'_ self) -> KListIter<'_, T> {
+        KListIter(Some(self))
     }
 }
 
@@ -89,7 +122,7 @@ impl<'a, T: 'static> Iterator for KListIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let list = self.0?;
-        let head = list.head();
+        let head = list.head()?;
         self.0 = list.tail();
         Some(head)
     }

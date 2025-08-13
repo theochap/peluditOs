@@ -1,6 +1,48 @@
 use crate::{kbox::KBox, kmalloc::KMalloc};
 
-const MEM_CELL_SIZE: usize = 1 << 12;
+pub const DEFAULT_MEM_CELL_SIZE: usize = 1 << 12;
+
+/// The type of error that occurred during an allocation.
+///
+/// This is used to determine if the allocation should be retried or if the error should be propagated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorSeverity {
+    Continue,
+    Fatal,
+}
+
+pub trait ErrorTypeExt {
+    fn error_severity(&self) -> ErrorSeverity;
+
+    fn is_fatal(&self) -> bool {
+        matches!(self.error_severity(), ErrorSeverity::Fatal)
+    }
+
+    fn is_continue(&self) -> bool {
+        matches!(self.error_severity(), ErrorSeverity::Continue)
+    }
+}
+
+impl ErrorTypeExt for AllocError {
+    fn error_severity(&self) -> ErrorSeverity {
+        match self {
+            AllocError::MemZoneNotFree => ErrorSeverity::Continue,
+            AllocError::MemZoneTooSmall { .. } => ErrorSeverity::Continue,
+            AllocError::OutOfMemory => ErrorSeverity::Fatal,
+            AllocError::SplitError(_) => ErrorSeverity::Fatal,
+        }
+    }
+}
+
+impl ErrorTypeExt for FreeError {
+    fn error_severity(&self) -> ErrorSeverity {
+        match self {
+            FreeError::ZoneAlreadyFree => ErrorSeverity::Fatal,
+            FreeError::InvalidOffset => ErrorSeverity::Fatal,
+            FreeError::SplitError(_) => ErrorSeverity::Fatal,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AllocError {
@@ -11,7 +53,6 @@ pub enum AllocError {
     },
     OutOfMemory,
     SplitError(SplitError),
-    ConsolidateError(ConsolidateError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,12 +66,6 @@ pub enum FreeError {
     ZoneAlreadyFree,
     InvalidOffset,
     SplitError(SplitError),
-    ConsolidateError(ConsolidateError),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConsolidateError {
-    CannotConsolidate,
 }
 
 pub trait MemZoneExt: 'static {
@@ -40,7 +75,7 @@ pub trait MemZoneExt: 'static {
     const SIZE_MASK: usize = Self::SIZE - 1;
 
     /// Creates a new memzone with the given value.
-    fn new(val: MemCell) -> Self;
+    fn new(is_free: bool) -> Self;
 
     fn size(&self) -> usize {
         Self::SIZE
@@ -74,21 +109,21 @@ pub trait MemZoneExt: 'static {
     /// Consolidates the memzone.
     ///
     /// This merges adjacent free/full chunks of memory.
-    fn consolidate(&mut self) -> Result<(), ConsolidateError>;
+    fn consolidate(&mut self);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
-pub enum MemCell {
+pub enum MemCell<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
     Free,
     Full,
 }
 
-impl MemZoneExt for MemCell {
-    const SIZE: usize = MEM_CELL_SIZE;
+impl<const SIZE: usize> MemZoneExt for MemCell<SIZE> {
+    const SIZE: usize = SIZE;
 
-    fn new(val: MemCell) -> Self {
-        val
+    fn new(free: bool) -> Self {
+        if free { Self::Free } else { Self::Full }
     }
 
     fn is_free(&self) -> bool {
@@ -137,11 +172,12 @@ impl MemZoneExt for MemCell {
     }
 
     /// Can never consolidate a single memcell.
-    fn consolidate(&mut self) -> Result<(), ConsolidateError> {
-        Err(ConsolidateError::CannotConsolidate)
+    fn consolidate(&mut self) {
+        // Do nothing.
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum MemZone<T: MemZoneExt> {
     Free,
     Full,
@@ -151,10 +187,11 @@ pub enum MemZone<T: MemZoneExt> {
 impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
     const SIZE: usize = 2 * T::SIZE;
 
-    fn new(val: MemCell) -> Self {
-        match val {
-            MemCell::Free => MemZone::<T>::Free,
-            MemCell::Full => MemZone::<T>::Full,
+    fn new(free: bool) -> Self {
+        if free {
+            MemZone::<T>::Free
+        } else {
+            MemZone::<T>::Full
         }
     }
 
@@ -167,18 +204,11 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
     }
 
     fn split(&mut self, kbox_maker: &mut KMalloc) -> Result<(), SplitError> {
-        // We cannot split a partial memzone.
-        let inner = match self {
-            Self::Partial { .. } => return Err(SplitError::CannotSplit),
-            Self::Free => MemCell::Free,
-            Self::Full => MemCell::Full,
-        };
-
         let left = kbox_maker
-            .new_box(T::new(inner))
+            .new_box(T::new(self.is_free()))
             .map_err(|_| SplitError::AllocError)?;
         let right = kbox_maker
-            .new_box(T::new(inner))
+            .new_box(T::new(self.is_free()))
             .map_err(|_| SplitError::AllocError)?;
         *self = Self::Partial { left, right };
         Ok(())
@@ -206,7 +236,7 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
                 };
 
                 // We need to consolidate the memzone to ensure that the left and right sides are not split.
-                self.consolidate().map_err(AllocError::ConsolidateError)?;
+                self.consolidate();
 
                 Ok(offset)
             }
@@ -255,7 +285,7 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
                     right.free::<M>(offset - T::SIZE, kbox_maker)?;
                 }
 
-                self.consolidate().map_err(FreeError::ConsolidateError)?;
+                self.consolidate();
 
                 Ok(())
             }
@@ -268,32 +298,49 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
         }
     }
 
-    fn consolidate(&mut self) -> Result<(), ConsolidateError> {
+    fn consolidate(&mut self) {
         match self {
-            Self::Free | Self::Full => Err(ConsolidateError::CannotConsolidate),
-
             Self::Partial { left, right, .. } if left.is_free() && right.is_free() => {
                 *self = Self::Free;
-                Ok(())
             }
 
             Self::Partial { left, right, .. } if left.is_full() && right.is_full() => {
                 *self = Self::Full;
-                Ok(())
             }
 
-            _ => Ok(()),
+            _ => {
+                // Do nothing.
+            }
         }
     }
 }
 
-type MemZone4K = MemZone<MemCell>;
-type MemZone8K = MemZone<MemZone4K>;
-type MemZone16K = MemZone<MemZone8K>;
-type MemZone32K = MemZone<MemZone16K>;
-type MemZone64K = MemZone<MemZone32K>;
-type MemZone128K = MemZone<MemZone64K>;
-type MemZone256K = MemZone<MemZone128K>;
-type MemZone512K = MemZone<MemZone256K>;
-type MemZone1M = MemZone<MemZone512K>;
-pub(super) type MemZone2M = MemZone<MemZone1M>;
+macro_rules! define_memzone_types {
+    (
+        base: $base_name:ident = $base_type:ident,
+        types: [
+            $($name:ident = $inner:ident),* $(,)?
+        ],
+        pub: $pub_name:ident = $pub_inner:ident
+    ) => {
+        type $base_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$base_type<SIZE>>;
+        $(
+            type $name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$inner<SIZE>>;
+        )*
+        pub(super) type $pub_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$pub_inner<SIZE>>;
+    };
+}
+
+define_memzone_types! {
+    base: MemZone2 = MemCell,
+    types: [
+        MemZone4 = MemZone2,
+        MemZone8 = MemZone4,
+        MemZone16 = MemZone8,
+        MemZone32 = MemZone16,
+        MemZone64 = MemZone32,
+        MemZone128 = MemZone64,
+        MemZone256 = MemZone128,
+    ],
+    pub: MemZone512 = MemZone256
+}

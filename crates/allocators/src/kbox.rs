@@ -11,7 +11,7 @@ use crate::utils::NonZero;
 /// A kernel box.
 ///
 /// This is a wrapper around a statically allocated value.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct KBox<T: 'static>(pub(super) &'static mut NonZero<T>);
 
 impl<T: 'static> Drop for KBox<T> {
@@ -27,6 +27,37 @@ impl<T: 'static> KBox<T> {
             NonZero::NonZero(inner) => inner,
             NonZero::Zero => unreachable!("KBox is zero"),
         }
+    }
+
+    pub fn try_map_inner_with_output<Out, F: FnOnce(T) -> Result<(T, Out), E>, E>(
+        &mut self,
+        f: F,
+    ) -> Result<Out, E> {
+        let inner = mem::take(self.0);
+        let inner = match inner {
+            NonZero::NonZero(inner) => inner,
+            NonZero::Zero => unreachable!("KBox is zero"),
+        };
+
+        let (new_inner, out) = f(inner)?;
+
+        *self.0 = NonZero::NonZero(new_inner);
+        Ok(out)
+    }
+
+    /// Safely map the inner value of the KBox.
+    pub fn map_inner_with_output<Out, F: FnOnce(T) -> (T, Out)>(&mut self, f: F) -> Out {
+        self.try_map_inner_with_output(|inner| Ok::<(T, Out), ()>(f(inner)))
+            .unwrap()
+    }
+
+    pub fn try_map_inner<F: FnOnce(T) -> Result<T, E>, E>(&mut self, f: F) -> Result<(), E> {
+        self.try_map_inner_with_output(|inner| Ok::<(T, ()), E>((f(inner)?, ())))
+    }
+
+    /// Safely map the inner value of the KBox.
+    pub fn map_inner<F: FnOnce(T) -> T>(&mut self, f: F) {
+        self.try_map_inner(|inner| Ok::<T, ()>(f(inner))).unwrap();
     }
 }
 
