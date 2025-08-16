@@ -18,8 +18,8 @@ pub struct BuddyAllocatorPage<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
 
 pub struct BuddyAllocator<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
     pub(crate) pages: KStack<BuddyAllocatorPage<SIZE>>,
-    memmap: MemoryMap,
-    memmap_cursor: usize,
+    pub(super) memmap: MemoryMap,
+    pub(super) memmap_cursor: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -56,10 +56,12 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
     fn try_allocate_new_zone(
         &mut self,
         kbox_maker: &mut KMalloc,
-    ) -> Result<usize, BuddyAllocatorError> {
+    ) -> Result<(), BuddyAllocatorError> {
         let Some(memmap_head) = self.memmap.head() else {
             return Err(BuddyAllocatorError::OutOfPhysicalMemoryPages);
         };
+
+        let mut memmap_base = memmap_head.base_addr;
 
         // Check if we have physical memory available.
         if self.memmap_cursor + Self::PAGE_SIZE > memmap_head.length {
@@ -73,6 +75,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
                 {
                     found = true;
                     self.memmap_cursor = 0;
+                    memmap_base = next_mem_entry.base_addr;
                     break;
                 }
             }
@@ -82,7 +85,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
             }
         }
 
-        let start_addr = self.memmap_cursor;
+        let start_addr = memmap_base + self.memmap_cursor;
 
         // We have found a usable physical memory zone.
         // We need to add it to the buddy allocator.
@@ -90,7 +93,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
             .push(
                 kbox_maker,
                 BuddyAllocatorPage {
-                    zone: MemZone::Full,
+                    zone: MemZone::Free,
                     start_addr,
                 },
             )
@@ -98,8 +101,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
 
         self.memmap_cursor += Self::PAGE_SIZE;
 
-        // If we get here, we have found a usable physical memory zone.
-        Ok(start_addr)
+        Ok(())
     }
 
     /// Allocates a memzone with the buddy allocator.
@@ -109,35 +111,40 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
         kbox_maker: &mut KMalloc,
     ) -> Result<usize, BuddyAllocatorError> {
         // Iterate over the buddy allocator's zones.
-        match self.pages.apply_until(|page| {
-            // Try to allocate the zone.
-            match page.zone.alloc::<T>(kbox_maker) {
-                Ok(zone) => Ok(Some(zone + page.start_addr)),
-                Err(error) if error.is_fatal() => {
-                    #[cfg(test)]
-                    println!(
-                        "Fatal error: Failed to allocate zone: {:?}. Error: {:?}",
-                        page.zone, error
-                    );
-                    Err(error)
+        match self
+            .pages
+            .apply_until(|page: &mut BuddyAllocatorPage<SIZE>| {
+                // Try to allocate the zone.
+                match page.zone.alloc::<T>(kbox_maker) {
+                    Ok(zone) => Ok(Some(zone + page.start_addr)),
+                    Err(error) if error.is_fatal() => {
+                        #[cfg(test)]
+                        println!(
+                            "Fatal error: Failed to allocate zone: {:?}. Error: {:?}",
+                            page.zone, error
+                        );
+                        Err(error)
+                    }
+                    Err(error) => {
+                        #[cfg(test)]
+                        println!(
+                            "Recoverable error: Failed to allocate zone: {:?}. Error: {:?}",
+                            page.zone, error
+                        );
+                        Ok(None)
+                    }
                 }
-                Err(error) => {
-                    #[cfg(test)]
-                    println!(
-                        "Recoverable error: Failed to allocate zone: {:?}. Error: {:?}",
-                        page.zone, error
-                    );
-                    Ok(None)
-                }
-            }
-        }) {
+            }) {
             Ok(Some(iter_result)) => return Ok(iter_result),
             Err(err) => return Err(BuddyAllocatorError::AllocationFailed(err)),
             Ok(None) => {}
         }
 
         // If we get here, we should try to add a new allocation zone if there is still physical memory available.
-        self.try_allocate_new_zone(kbox_maker)
+        self.try_allocate_new_zone(kbox_maker)?;
+
+        // Try to allocate the zone again.
+        self.alloc::<T>(kbox_maker)
     }
 
     /// Frees a memzone with the buddy allocator.

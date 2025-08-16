@@ -8,10 +8,10 @@ pub struct KMalloc {
     pub(crate) start_addr: usize,
 
     /// The current offset of the allocation space.
-    offset: usize,
+    pub(super) offset: usize,
 
     /// The virtual end address of the allocation space.
-    end_addr: usize,
+    pub(super) end_addr: usize,
 }
 
 /// The error returned when the allocator runs out of memory.

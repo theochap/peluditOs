@@ -5,6 +5,7 @@ use crate::{
     kstack::KStack,
 };
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct MemoryMapEntry {
     pub base_addr: usize,
     pub length: usize,
