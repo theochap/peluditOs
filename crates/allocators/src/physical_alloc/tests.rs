@@ -66,7 +66,9 @@ fn test_buddy_allocator() {
     assert_eq!(iterator.next(), None);
 
     // Let's allocate the full second zone.
-    buddy_allocator.alloc::<MemZone512>(&mut kmalloc).unwrap();
+    buddy_allocator
+        .alloc::<MemZone512<MEMZONE_SIZE>>(&mut kmalloc)
+        .unwrap();
 
     // Iterate over the pages and ensure that the second page is full.
     let mut iterator = buddy_allocator.pages.iter();

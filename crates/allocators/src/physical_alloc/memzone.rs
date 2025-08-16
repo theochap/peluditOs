@@ -68,7 +68,7 @@ pub enum FreeError {
     SplitError(SplitError),
 }
 
-pub trait MemZoneExt: 'static {
+pub trait MemZoneExt<const BASE: usize = DEFAULT_MEM_CELL_SIZE>: 'static {
     const SIZE: usize;
 
     /// Returns a mask that can be used to get the offset of a chunk of memory from the start of the memzone.
@@ -90,7 +90,8 @@ pub trait MemZoneExt: 'static {
     /// Allocates a chunk of memory from the memzone.
     ///
     /// Returns the offset of the allocated chunk compared to the start of the memzone.
-    fn alloc<T: MemZoneExt>(&mut self, kbox_maker: &mut KMalloc) -> Result<usize, AllocError>;
+    fn alloc<T: MemZoneExt<BASE>>(&mut self, kbox_maker: &mut KMalloc)
+    -> Result<usize, AllocError>;
 
     /// Frees a chunk of memory from the memzone.
     ///
@@ -100,7 +101,7 @@ pub trait MemZoneExt: 'static {
     /// ## Invariant
     /// This chunk of memory should always be full. We should traverse the memory zones down
     /// until we find a fully allocated chunk of memory.
-    fn free<M: MemZoneExt>(
+    fn free<M: MemZoneExt<BASE>>(
         &mut self,
         offset: usize,
         kbox_maker: &mut KMalloc,
@@ -119,7 +120,7 @@ pub enum MemCell<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
     Full,
 }
 
-impl<const SIZE: usize> MemZoneExt for MemCell<SIZE> {
+impl<const SIZE: usize> MemZoneExt<SIZE> for MemCell<SIZE> {
     const SIZE: usize = SIZE;
 
     fn new(free: bool) -> Self {
@@ -138,7 +139,10 @@ impl<const SIZE: usize> MemZoneExt for MemCell<SIZE> {
         Err(SplitError::CannotSplit)
     }
 
-    fn alloc<T: MemZoneExt>(&mut self, _kbox_maker: &mut KMalloc) -> Result<usize, AllocError> {
+    fn alloc<T: MemZoneExt<SIZE>>(
+        &mut self,
+        _kbox_maker: &mut KMalloc,
+    ) -> Result<usize, AllocError> {
         if self.is_full() {
             return Err(AllocError::MemZoneNotFree);
         }
@@ -158,7 +162,7 @@ impl<const SIZE: usize> MemZoneExt for MemCell<SIZE> {
     /// Frees a chunk of memory from the memzone.
     ///
     /// In this case, offset is always 0.
-    fn free<M: MemZoneExt>(
+    fn free<M: MemZoneExt<SIZE>>(
         &mut self,
         offset: usize,
         _kbox_maker: &mut KMalloc,
@@ -178,20 +182,20 @@ impl<const SIZE: usize> MemZoneExt for MemCell<SIZE> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum MemZone<T: MemZoneExt> {
+pub enum MemZone<const BASE: usize, T: MemZoneExt<BASE>> {
     Free,
     Full,
     Partial { left: KBox<T>, right: KBox<T> },
 }
 
-impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
+impl<const BASE: usize, T: MemZoneExt<BASE>> MemZoneExt<BASE> for MemZone<BASE, T> {
     const SIZE: usize = 2 * T::SIZE;
 
     fn new(free: bool) -> Self {
         if free {
-            MemZone::<T>::Free
+            MemZone::<BASE, T>::Free
         } else {
-            MemZone::<T>::Full
+            MemZone::<BASE, T>::Full
         }
     }
 
@@ -214,7 +218,10 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
         Ok(())
     }
 
-    fn alloc<M: MemZoneExt>(&mut self, kbox_maker: &mut KMalloc) -> Result<usize, AllocError> {
+    fn alloc<M: MemZoneExt<BASE>>(
+        &mut self,
+        kbox_maker: &mut KMalloc,
+    ) -> Result<usize, AllocError> {
         if M::SIZE > Self::SIZE {
             return Err(AllocError::MemZoneTooSmall {
                 required_size: M::SIZE,
@@ -255,7 +262,7 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
         }
     }
 
-    fn free<M: MemZoneExt>(
+    fn free<M: MemZoneExt<BASE>>(
         &mut self,
         offset: usize,
         kbox_maker: &mut KMalloc,
@@ -317,30 +324,31 @@ impl<T: MemZoneExt> MemZoneExt for MemZone<T> {
 
 macro_rules! define_memzone_types {
     (
-        base: $base_name:ident = $base_type:ident,
+        base: $base_name:ident<$base_type:ident>,
         types: [
-            $($name:ident = $inner:ident),* $(,)?
+            $($name:ident<$inner:ident>),* $(,)?
         ],
-        pub: $pub_name:ident = $pub_inner:ident
+        pub: $pub_name:ident<$pub_inner:ident>
     ) => {
-        type $base_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$base_type<SIZE>>;
+        type $base_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<SIZE, $base_type<SIZE>>;
         $(
-            type $name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$inner<SIZE>>;
+            type $name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<SIZE, $inner<SIZE>>;
         )*
-        pub(super) type $pub_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> = MemZone<$pub_inner<SIZE>>;
+        pub(super) type $pub_name<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> =
+            MemZone<SIZE, $pub_inner<SIZE>>;
     };
 }
 
 define_memzone_types! {
-    base: MemZone2 = MemCell,
+    base: MemZone2<MemCell>,
     types: [
-        MemZone4 = MemZone2,
-        MemZone8 = MemZone4,
-        MemZone16 = MemZone8,
-        MemZone32 = MemZone16,
-        MemZone64 = MemZone32,
-        MemZone128 = MemZone64,
-        MemZone256 = MemZone128,
+        MemZone4<MemZone2>,
+        MemZone8<MemZone4>,
+        MemZone16<MemZone8>,
+        MemZone32<MemZone16>,
+        MemZone64<MemZone32>,
+        MemZone128<MemZone64>,
+        MemZone256<MemZone128>,
     ],
-    pub: MemZone512 = MemZone256
+    pub: MemZone512<MemZone256>
 }

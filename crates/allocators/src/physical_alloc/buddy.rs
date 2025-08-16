@@ -104,7 +104,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
 
     /// Allocates a memzone with the buddy allocator.
     /// Returns the address of the allocated memzone.
-    pub fn alloc<T: MemZoneExt>(
+    pub fn alloc<T: MemZoneExt<SIZE>>(
         &mut self,
         kbox_maker: &mut KMalloc,
     ) -> Result<usize, BuddyAllocatorError> {
@@ -141,7 +141,7 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
     }
 
     /// Frees a memzone with the buddy allocator.
-    fn free<T: MemZoneExt>(
+    fn free<T: MemZoneExt<SIZE>>(
         &mut self,
         kbox_maker: &mut KMalloc,
         addr: usize,
