@@ -275,12 +275,6 @@ impl<const BASE: usize, T: MemZoneExt<BASE>> MemZoneExt<BASE> for MemZone<BASE, 
         offset: usize,
         kbox_maker: &mut KMalloc,
     ) -> Result<(), FreeError> {
-        // We need to ensure the offset is valid.
-        if offset & Self::SIZE_MASK != 0 {
-            // If the offset doesn't fit in the memzone, it's invalid.
-            return Err(FreeError::InvalidOffset);
-        }
-
         match self {
             // If the memzone is free, we can't free anything.
             Self::Free => Err(FreeError::ZoneAlreadyFree),

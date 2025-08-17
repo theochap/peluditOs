@@ -1,7 +1,7 @@
 use crate::kmalloc::KMalloc;
 use crate::physical_alloc::buddy::BuddyAllocator;
 use crate::physical_alloc::memmap::{MemoryMap, MemoryMapEntry, MemoryMapKind};
-use crate::physical_alloc::memzone::{MemZone, MemZone256, MemZone512, MemZoneExt};
+use crate::physical_alloc::memzone::{MemZone, MemZone128, MemZone256, MemZone512, MemZoneExt};
 use crate::utils::NonZero;
 
 // Let's allocate a 4KB memzone.
@@ -193,4 +193,89 @@ fn test_buddy_allocator_split() {
     let first_page = iterator.next().unwrap();
     assert!(first_page.zone.is_full());
     assert_eq!(first_page.zone.size(), 512 * MEMZONE_SIZE);
+}
+
+#[test]
+fn test_buddy_alloc_free_with_consolidate() {
+    let BuddyAllocatorSetup {
+        mut buddy_allocator,
+        mut kmalloc,
+        mem: _mem,
+    } = setup_buddy_allocator();
+
+    // Let's allocate half a full zone.
+    let half_full_addr = buddy_allocator
+        .alloc::<MemZone256<MEMZONE_SIZE>>(&mut kmalloc)
+        .unwrap();
+
+    // Let's allocate a quarter full zone
+    let quarter_addr = buddy_allocator
+        .alloc::<MemZone128<MEMZONE_SIZE>>(&mut kmalloc)
+        .unwrap();
+
+    // Ensure the top zone is double splitted
+    let mut iterator = buddy_allocator.pages.iter();
+
+    let second_page = iterator.next().unwrap();
+
+    match &second_page.zone {
+        MemZone::Partial { left, right } => {
+            assert!(left.is_full());
+
+            match &**right {
+                MemZone::Partial {
+                    left: inner_left,
+                    right: inner_right,
+                } => {
+                    assert!(inner_left.is_full());
+                    assert!(inner_right.is_free());
+                }
+                _ => {
+                    panic!("Inner memzone should be partial");
+                }
+            }
+        }
+        page => panic!("New page is not partial: {page:?}"),
+    }
+
+    // Free the half full zone
+    buddy_allocator
+        .free::<MemZone256<MEMZONE_SIZE>>(&mut kmalloc, half_full_addr)
+        .unwrap();
+
+    // Let's check that only the right zone is allocated
+    let mut iterator = buddy_allocator.pages.iter();
+
+    let second_page = iterator.next().unwrap();
+
+    match &second_page.zone {
+        MemZone::Partial { left, right } => {
+            assert!(left.is_free());
+
+            match &**right {
+                MemZone::Partial {
+                    left: inner_left,
+                    right: inner_right,
+                } => {
+                    assert!(inner_left.is_full());
+                    assert!(inner_right.is_free());
+                }
+                _ => {
+                    panic!("Inner memzone should be partial");
+                }
+            }
+        }
+        page => panic!("New page is not partial: {page:?}"),
+    }
+
+    // Free both zones
+    buddy_allocator
+        .free::<MemZone128<MEMZONE_SIZE>>(&mut kmalloc, quarter_addr)
+        .unwrap();
+
+    // The first zone should be free
+    let mut iterator = buddy_allocator.pages.iter();
+
+    let second_page = iterator.next().unwrap();
+    assert!(second_page.zone.is_free());
 }

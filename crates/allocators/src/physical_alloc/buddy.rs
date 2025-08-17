@@ -16,6 +16,12 @@ pub struct BuddyAllocatorPage<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
     pub(crate) start_addr: usize,
 }
 
+impl<const SIZE: usize> BuddyAllocatorPage<SIZE> {
+    pub const fn end_addr(&self) -> usize {
+        self.start_addr + MemZone512::<SIZE>::SIZE
+    }
+}
+
 pub struct BuddyAllocator<const SIZE: usize = DEFAULT_MEM_CELL_SIZE> {
     pub(crate) pages: KStack<BuddyAllocatorPage<SIZE>>,
     pub(super) memmap: MemoryMap,
@@ -117,22 +123,8 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
                 // Try to allocate the zone.
                 match page.zone.alloc::<T>(kbox_maker) {
                     Ok(zone) => Ok(Some(zone + page.start_addr)),
-                    Err(error) if error.is_fatal() => {
-                        #[cfg(test)]
-                        println!(
-                            "Fatal error: Failed to allocate zone: {:?}. Error: {:?}",
-                            page.zone, error
-                        );
-                        Err(error)
-                    }
-                    Err(error) => {
-                        #[cfg(test)]
-                        println!(
-                            "Recoverable error: Failed to allocate zone: {:?}. Error: {:?}",
-                            page.zone, error
-                        );
-                        Ok(None)
-                    }
+                    Err(error) if error.is_fatal() => Err(error),
+                    Err(error) => Ok(None),
                 }
             }) {
             Ok(Some(iter_result)) => return Ok(iter_result),
@@ -148,23 +140,35 @@ impl<const SIZE: usize> BuddyAllocator<SIZE> {
     }
 
     /// Frees a memzone with the buddy allocator.
-    fn free<T: MemZoneExt<SIZE>>(
+    pub fn free<T: MemZoneExt<SIZE>>(
         &mut self,
         kbox_maker: &mut KMalloc,
         addr: usize,
     ) -> Result<(), BuddyAllocatorError> {
+        // We need to ensure the offset is valid.
+        if addr & T::SIZE_MASK != 0 {
+            // If the offset doesn't fit in the memzone, it's invalid.
+            return Err(BuddyAllocatorError::OffsetInvalid);
+        }
+
         // Find the memzone that contains the address.
-        self.pages.apply_until(|page| {
-            if addr >= page.start_addr && addr < page.start_addr + page.zone.size() {
-                page.zone
-                    .free::<T>(addr - page.start_addr, kbox_maker)
-                    .map_err(BuddyAllocatorError::FreeError)?;
-                return Ok::<_, BuddyAllocatorError>(Some(()));
-            }
+        if self
+            .pages
+            .apply_until(|page| {
+                if addr >= page.start_addr && addr < page.end_addr() {
+                    page.zone
+                        .free::<T>(addr - page.start_addr, kbox_maker)
+                        .map_err(BuddyAllocatorError::FreeError)?;
+                    return Ok::<_, BuddyAllocatorError>(Some(()));
+                }
 
-            Ok(None)
-        })?;
+                Ok(None)
+            })?
+            .is_none()
+        {
+            return Err(BuddyAllocatorError::OffsetInvalid);
+        }
 
-        Err(BuddyAllocatorError::OffsetInvalid)
+        Ok(())
     }
 }
