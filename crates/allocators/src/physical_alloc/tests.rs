@@ -44,7 +44,7 @@ fn test_allocate_memzone() {
     let mem_bytes: &NonZero<&str> = unsafe { &*mem_ptr };
 
     assert_eq!(mem_bytes, &expected_value);
-    assert_eq!(*kbox.0, expected_value);
+    assert_eq!(kbox.inner(), &expected_value);
 }
 
 pub struct BuddyAllocatorSetup {

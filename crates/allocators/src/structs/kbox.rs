@@ -14,6 +14,13 @@ use crate::utils::NonZero;
 #[derive(Debug, PartialEq, Eq)]
 pub struct KBox<T: 'static>(pub(super) &'static mut NonZero<T>);
 
+#[cfg(test)]
+impl<T: 'static> KBox<T> {
+    pub fn inner(&self) -> &NonZero<T> {
+        &self.0
+    }
+}
+
 impl<T: 'static> Drop for KBox<T> {
     fn drop(&mut self) {
         // TODO: free the object inside the memory allocator.

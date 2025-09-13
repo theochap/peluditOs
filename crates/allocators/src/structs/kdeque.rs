@@ -44,6 +44,26 @@ impl<T: 'static> KDeque<T> {
         Some(curr_head.take().take().value)
     }
 
+    pub fn pop_back(&mut self) -> Option<T> {
+        let inner = self.0.as_mut()?;
+
+        let curr_tail = inner.tail.clone();
+        let new_tail = curr_tail.get().prev.clone();
+
+        if let Some(new_tail) = new_tail {
+            new_tail.replace(|mut t| {
+                t.next = None;
+                t
+            });
+
+            inner.tail = new_tail;
+        } else {
+            self.0 = None;
+        }
+
+        Some(curr_tail.take().take().value)
+    }
+
     pub fn push_front(&mut self, kbox_maker: &mut KMalloc, value: T) -> Result<(), Error> {
         let Some(inner) = self.0.as_mut() else {
             let ptr = KDequePtrs::new(kbox_maker, value)?;
@@ -223,5 +243,29 @@ mod tests {
         assert_eq!(deque.pop_front(), Some(2));
         assert_eq!(deque.pop_front(), Some(4));
         assert_eq!(deque.pop_front(), None);
+    }
+
+    #[test]
+    fn test_kdeque_pop_back() {
+        // Spawn a new kmalloc to allocate the tables.
+        let mut mem = vec![0_u8; ALLOC_SIZE];
+
+        // Let's get the address of the memzone.
+        let memzone_addr = mem.as_mut_ptr() as usize;
+
+        // Let's create the kernel memory allocator and set it for the memzone.
+        let mut kmalloc = KMalloc::new(memzone_addr, memzone_addr + ALLOC_SIZE);
+
+        let mut deque = KDeque::new();
+        deque.push_front(&mut kmalloc, 1).unwrap();
+        deque.push_front(&mut kmalloc, 2).unwrap();
+        deque.push_front(&mut kmalloc, 3).unwrap();
+        deque.push_front(&mut kmalloc, 4).unwrap();
+
+        assert_eq!(deque.pop_back(), Some(1));
+        assert_eq!(deque.pop_back(), Some(2));
+        assert_eq!(deque.pop_back(), Some(3));
+        assert_eq!(deque.pop_back(), Some(4));
+        assert_eq!(deque.pop_back(), None);
     }
 }

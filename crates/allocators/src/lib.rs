@@ -4,12 +4,8 @@
 
 #![cfg_attr(not(test), no_std)]
 
-pub mod kbox;
-pub mod kcell;
-pub mod kdeque;
-pub mod kmalloc;
-pub mod krc;
-pub mod kstack;
+pub mod structs;
+pub(crate) use structs::*;
 
 pub mod utils;
 
