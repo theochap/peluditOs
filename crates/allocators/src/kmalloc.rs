@@ -1,6 +1,4 @@
-use core::sync::atomic::AtomicUsize;
-
-use crate::{karc::KArc, kbox::KBox, utils::NonZero};
+use crate::{kbox::KBox, kcell::KCell, krc::KRc, utils::NonZero};
 
 #[derive(Debug)]
 pub struct KMalloc {
@@ -65,13 +63,13 @@ impl KMalloc {
         Ok(KBox(ptr))
     }
 
-    pub fn new_arc<T: 'static>(&mut self, addr: T) -> Result<KArc<T>, Error> {
-        let ptr: &'static T = self.alloc(addr)?;
+    pub fn new_rc<T: 'static>(&mut self, addr: T) -> Result<KRc<T>, Error> {
+        let ptr: *mut NonZero<T> = self.alloc(NonZero::NonZero(addr))?;
 
-        let ref_count = AtomicUsize::new(1);
-        let ref_ptr: &'static AtomicUsize = self.alloc(ref_count)?;
+        let ref_count = KCell::new(1);
+        let ref_ptr: &'static KCell<usize> = self.alloc(ref_count)?;
 
-        Ok(KArc {
+        Ok(KRc {
             inner: ptr,
             ref_count: ref_ptr,
         })
