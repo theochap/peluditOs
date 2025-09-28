@@ -57,6 +57,10 @@ impl<T> KCell<T> {
         }
     }
 
+    pub fn get_mut(&mut self) -> &mut T {
+        self.inner.get_mut().inner_ref_mut()
+    }
+
     /// Takes back ownership of the inner value. Consumes the KCell.
     pub fn take(self) -> T {
         unsafe {

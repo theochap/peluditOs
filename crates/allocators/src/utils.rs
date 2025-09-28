@@ -39,6 +39,13 @@ impl<T> NonZero<T> {
         }
     }
 
+    pub fn inner_ref_mut(&mut self) -> &mut T {
+        match self {
+            Self::NonZero(value) => value,
+            Self::Zero => panic!("Trying to deref a null NonZero!"),
+        }
+    }
+
     pub fn take(&mut self) -> T {
         let val = mem::take(self);
 

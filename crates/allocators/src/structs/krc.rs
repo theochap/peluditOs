@@ -1,14 +1,14 @@
 //! Kernel reference counted pointer.
 //! Implements allocation of kernel objects.
 
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 use crate::{kcell::KCell, utils::NonZero};
 
 /// A kernel reference counted cell.
 pub type KRefCell<T> = KRc<KCell<T>>;
 
-/// A kernel arc.
+/// A kernel reference counted cell.
 ///
 /// This is a wrapper around a statically allocated value.
 pub struct KRc<T: 'static> {
@@ -30,6 +30,13 @@ impl<T: 'static> Deref for KRc<T> {
         let inner =
             unsafe { <*mut NonZero<T>>::as_ref(self.inner).expect("inner pointer cannot be null") };
         inner.inner_ref()
+    }
+}
+
+impl<T: 'static> DerefMut for KRc<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let inner = unsafe { self.inner.as_mut().expect("inner pointer cannot be null") };
+        inner.inner_ref_mut()
     }
 }
 
